@@ -1,0 +1,84 @@
+*reversi.txt* Play Reversi game in Vim
+
+Author:  Takamichi OHARA
+License: CC0-1.0 Universal or The Unlicense
+
+==============================================================================
+CONTENTS                                                    *reversi-contents*
+
+    1. Introduction ............................ |reversi-introduction|
+    2. Usage ................................... |reversi-usage|
+    3. Commands ................................ |reversi-commands|
+    4. Mappings ................................ |reversi-mappings|
+    5. Game Rules .............................. |reversi-rules|
+    6. Requirements ............................ |reversi-requirements|
+
+==============================================================================
+1. INTRODUCTION                                         *reversi-introduction*
+
+reversi.vim is a Vim plugin that allows you to play the classic board game
+Reversi directly within Vim. You play against a CPU opponent.
+
+The CPU engine's strength depends on your Vim/Neovim environment. If Lua
+support is available, it will use a strong engine based on the Nega-Scout
+algorithm. Otherwise, it falls back to a simpler engine written in Vim
+script.
+
+==============================================================================
+2. USAGE                                                       *reversi-usage*
+
+Start a new game: >
+    :Reversi
+<
+Place a disc:
+    1. Move the cursor to an empty square on the board
+    2. Press <CR> (Enter) to place your disc
+
+The game alternates between you and the CPU. The first player is chosen
+randomly. The CPU will automatically make its move after yours.
+
+==============================================================================
+3. COMMANDS                                                 *reversi-commands*
+
+:Reversi                                                  *:Reversi*
+    Start a new Reversi game in a new buffer. If a game is already active,
+    switch to that buffer instead.
+
+==============================================================================
+4. MAPPINGS                                                 *reversi-mappings*
+
+The following mappings are available in the Reversi buffer:
+
+<CR>                    Place a disc at the current cursor position if the
+                        move is valid. Invalid moves will display an error
+                        message in the status area.
+
+==============================================================================
+5. GAME RULES                                                  *reversi-rules*
+
+Reversi is played on an 8x8 board. The goal is to have more discs of your
+color than your opponent when the game ends.
+
+Basic rules:
+- Players alternate turns placing discs on the board.
+- A valid move must flip at least one opponent's disc.
+- Discs are flipped when sandwiched between the placed disc and another
+  disc of the same color (horizontally, vertically, or diagonally).
+- If a player has no valid moves, their turn is skipped.
+- The game ends when neither player can move or the board is full.
+- The player with the most discs wins.
+
+Scoring:
+- Current scores are displayed below the board.
+
+==============================================================================
+6. REQUIREMENTS                                         *reversi-requirements*
+
+- Vim 8.0 or later recommended.
+- Text properties support (Vim 8.1.1365+) for colored highlighting.
+  - Without text properties, the game is still playable but without colors.
+- (Recommended) For the stronger CPU opponent, Neovim or a version of Vim
+  compiled with the `+lua` feature is required.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
