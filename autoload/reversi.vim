@@ -187,11 +187,11 @@ function! s:init_board() abort
   " Second player (white) gets top-right and bottom-left
   let first_disc = s:state.first_player == 'user' ? s:Disc.user : s:Disc.cpu
   let second_disc = s:state.first_player == 'user' ? s:Disc.cpu : s:Disc.user
-  
-  let board[3][3] = first_disc
-  let board[4][4] = first_disc
-  let board[3][4] = second_disc
-  let board[4][3] = second_disc
+
+  let board[3][4] = first_disc
+  let board[4][3] = first_disc
+  let board[3][3] = second_disc
+  let board[4][4] = second_disc
   
   return board
 endfunction

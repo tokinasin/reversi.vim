@@ -4,8 +4,76 @@
 
 local M = {}
 
+local BOOK_THRESHOLD = 12
 local ENDGAME_THRESHOLD = 12   -- Switch to exhaustive search when empty cells <= this
-local SEARCH_DEPTH = 7         -- Depth for midgame NegaScout search
+local SEARCH_DEPTH = 6         -- Depth for midgame NegaScout search
+
+-- Opening book
+local opening_book = nil
+local BOOK_FILE = nil  -- Will be set from Vim
+
+-- Load opening book
+local function load_opening_book()
+  if opening_book then
+    return true
+  end
+  
+  if not BOOK_FILE then
+    -- Try to find book.lua in the same directory as this script
+    local info = debug.getinfo(1, "S")
+    if info and info.source then
+      local script_path = info.source:match("^@?(.*/)")
+      if script_path then
+        BOOK_FILE = script_path .. "book.lua"
+      end
+    end
+  end
+
+  if BOOK_FILE then
+    local success, book = pcall(dofile, BOOK_FILE)
+    if success and type(book) == "table" then
+      opening_book = book
+      return true
+    end
+  end
+  
+  -- Book not available
+  opening_book = {}
+  return false
+end
+
+-- Convert 1D board to string key for book lookup
+local function board_to_book_key(board, discs)
+  local key = {}
+  for i = 1, 64 do
+    if board[i] == discs.empty then
+      key[i] = '0'
+    elseif board[i] == discs.cpu then
+      key[i] = '1'
+    else
+      key[i] = '2'
+    end
+  end
+  return table.concat(key)
+end
+
+-- Convert move notation (e.g., "f5") to coordinates
+local function parse_book_move(move_str)
+  local col = string.byte(move_str, 1) - string.byte('a')  -- a=0, b=1, ..., h=7
+  local row = tonumber(move_str:sub(2)) - 1  -- 1=0, 2=1, ..., 8=7
+  return row, col
+end
+
+-- Find matching move from book moves in available moves list
+local function find_book_move_in_moves(book_move, moves)
+  local row, col = parse_book_move(book_move)
+  for i, move in ipairs(moves) do
+    if move.row == row and move.col == col then
+      return i
+    end
+  end
+  return nil
+end
 
 -- Bitwise operations compatibility layer
 local bit_xor
@@ -123,62 +191,6 @@ local WEIGHTS_8 = {
        0,    0,    0,    0,    0,    0,    0,    0,
 }
 
---
--- local WEIGHTS_16 = {
---     9173, -2397,  209, -290, -290,  209, -2397, 9173,
---     -2397, -5556, -1315, -999, -999, -1315, -5556, -2397,
---      209, -1315, -457, -378, -378, -457, -1315,  209,
---     -290, -999, -378, -373, -373, -378, -999, -290,
---     -290, -999, -378, -373, -373, -378, -999, -290,
---      209, -1315, -457, -378, -378, -457, -1315,  209,
---     -2397, -5556, -1315, -999, -999, -1315, -5556, -2397,
---     9173, -2397,  209, -290, -290,  209, -2397, 9173,
--- }
---
--- local WEIGHTS_32 = {
---     8223, -829,  120,   36,   36,  120, -829, 8223,
---     -829, -4142, -811, -654, -654, -811, -4142, -829,
---      120, -811, -354, -294, -294, -354, -811,  120,
---       36, -654, -294, -257, -257, -294, -654,   36,
---       36, -654, -294, -257, -257, -294, -654,   36,
---      120, -811, -354, -294, -294, -354, -811,  120,
---     -829, -4142, -811, -654, -654, -811, -4142, -829,
---     8223, -829,  120,   36,   36,  120, -829, 8223,
--- }
---
--- local WEIGHTS_48 = {
---     4036,  127,   12,   30,   30,   12,  127, 4036,
---      127, -1209, -491, -331, -331, -491, -1209,  127,
---       12, -491, -356, -173, -173, -356, -491,   12,
---       30, -331, -173, -136, -136, -173, -331,   30,
---       30, -331, -173, -136, -136, -173, -331,   30,
---       12, -491, -356, -173, -173, -356, -491,   12,
---      127, -1209, -491, -331, -331, -491, -1209,  127,
---     4036,  127,   12,   30,   30,   12,  127, 4036,
--- }
---
--- local WEIGHTS_64 = {
---     1854,  505,   44,   59,   59,   44,  505, 1854,
---      505,  -33, -154,    8,    8, -154,  -33,  505,
---       44, -154, -239,  133,  133, -239, -154,   44,
---       59,    8,  133,  112,  112,  133,    8,   59,
---       59,    8,  133,  112,  112,  133,    8,   59,
---       44, -154, -239,  133,  133, -239, -154,   44,
---      505,  -33, -154,    8,    8, -154,  -33,  505,
---     1854,  505,   44,   59,   59,   44,  505, 1854,
--- }
---
--- local WEIGHTS_8 = {
---        0,    0,    0,    0,    0,    0,    0,    0,
---        0,  -70, -173,   35,   35, -173,  -70,    0,
---        0, -173, -108, -114, -114, -108, -173,    0,
---        0,   35, -114,   34,   34, -114,   35,    0,
---        0,   35, -114,   34,   34, -114,   35,    0,
---        0, -173, -108, -114, -114, -108, -173,    0,
---        0,  -70, -173,   35,   35, -173,  -70,    0,
---        0,    0,    0,    0,    0,    0,    0,    0,
--- }
-
 -- Zobrist hashing tables
 local zobrist = {
   keys = {},  -- [position][disc_type] -> random number
@@ -288,16 +300,11 @@ local function get_weights(empty_count)
     return WEIGHTS_40
   elseif empty_count >= 16 then
     return WEIGHTS_48
-  else
+  elseif empty_count >= 8 then
     return WEIGHTS_56
+  else
+    return WEIGHTS_64
   end
-  -- if empty_count > OPENING_THRESHOLD then
-  --   return weights_opening
-  -- elseif empty_count > ENDGAME_THRESHOLD then
-  --   return weights_middlegame
-  -- else
-  --   return weights_endgame
-  -- end
 end
 
 -- Evaluate board from CPU's perspective
@@ -575,15 +582,35 @@ function M.best_move(board_2d, moves, discs)
     return 0, 0
   end
   
+  -- Try to use opening book first
+  local board = convert_to_1d(board_2d)
+  local empty_count = count_empty_cells(board, discs)
+  if empty_count >= BOOK_THRESHOLD then
+    load_opening_book()
+    
+    local book_key = board_to_book_key(board, discs)
+    
+    if opening_book and opening_book[book_key] then
+      local book_moves = opening_book[book_key]
+      -- Try each book move in order until we find one that's valid
+      for _, book_move in ipairs(book_moves) do
+        local move_idx = find_book_move_in_moves(book_move, moves)
+        if move_idx then
+          -- Found a book move that's valid
+          return move_idx - 1, 9999  -- Return high score to indicate book move
+        end
+      end
+    end
+  end
+  
+  -- No book move available, use normal search
   -- Initialize Zobrist hashing
   init_zobrist()
   
-  -- Convert to 1D board
-  local board = convert_to_1d(board_2d)
   local hash = calculate_hash(board, discs)
   
+  -- (Rest of the existing best_move code remains unchanged...)
   -- Count empty cells to determine search strategy
-  local empty_count = count_empty_cells(board, discs)
   local use_exhaustive = empty_count <= ENDGAME_THRESHOLD
   
   local best_idx = 0
