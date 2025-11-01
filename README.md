@@ -1,3 +1,6 @@
+> [!CAUTION]
+> Weight tables and book are currently undergoing adjustments. Please be aware that unstable behavior may occur.
+
 # reversi.vim
 
 - Play Reversi in Vim/Neovim without any external dependencies.
